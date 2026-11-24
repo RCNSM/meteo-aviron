@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#003c84">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RCNSM">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>RCNSM · Météo</title>
+<link rel="stylesheet" href="polices/polices.css">
+<style>
+/* Plein écran, rien ne défile. Fond bleu roi, cartes blanches. De haut en bas : en-tête (logo + titre),
+   « maintenant » (météo, vent, débit de la Meuse), radar IRM (prend toute la hauteur libre), prévisions heure par heure en bas.
+   Couleurs relevées sur la maquette du 16/11/2026. */
+:root{
+  --fond1:#003c84; --fond2:#004e9c; --fond3:#00306c;
+  --panel:#ffffff; --ink:#001038; --muted:#2a3a5a; --line:#d2d6dc;
+  --accent:#049cf0; --cyan:#8ce8fc; --jaune:#f6cc00; --ligne-claire:#289ce4;
+  --sun:#f6c000; --cloud-fill:#ffffff; --cloud-ink:#084488; --rain:#049cf0; --rain-txt:#0858a0; --wind:#0ca0ec;
+  --raf:#fcde60; --raf-clair:#fff0b4; --raf-rouge:#ffc9c2; --raf-rouge-txt:#9b1c12;
+  --bouton:#0054a2; --pill:#cfe0ec; --seg:#a0b8cc; --seg-lu:#0488ec; --col-on:#cceafc;
+  --warn2:#ef8a26; --warn3:#d8423a;
+  --f-display:"Sora",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:linear-gradient(180deg,var(--fond1) 0%,var(--fond2) 45%,var(--fond3) 100%);background-color:var(--fond2);
+  color:var(--ink);font:400 14px/1.35 var(--f-body);overflow:hidden;-webkit-tap-highlight-color:transparent;
+}
+a{color:inherit;text-decoration:none}
+.app{
+  height:100dvh;display:flex;flex-direction:column;gap:8px;
+  padding:calc(env(safe-area-inset-top,0px) + 6px) 12px calc(env(safe-area-inset-bottom,0px) + 16px);
+}
+.panel{background:var(--panel);border-radius:18px;box-shadow:0 4px 14px rgba(0,16,56,.25)}
+
+/* --- En-tête : logo du club, trait, titre blanc --- */
+.entete{flex:0 0 auto;position:relative;display:flex;align-items:center;gap:12px;height:88px;color:#fff}
+.entete .logo{flex:0 0 auto;height:92%;display:flex;align-items:center;position:relative;z-index:1}
+.entete .logo img{height:100%;width:auto}
+.entete .txt{font:600 22px/1 var(--f-display);letter-spacing:.1em;color:var(--cyan)}
+.entete .sep{flex:0 0 auto;align-self:stretch;width:2px;margin:12px 0 16px;background:#fff;opacity:.85;position:relative;z-index:1}
+.titre{position:relative;z-index:1;min-width:0;text-shadow:0 1px 4px rgba(0,30,80,.7)}
+.titre h1{margin:0;font:700 29px/1 var(--f-display);letter-spacing:-.02em;color:#fff}
+.titre .souligne{position:relative}
+.titre .souligne::after{content:"";position:absolute;left:2px;right:-2px;bottom:-6px;height:3px;border-radius:3px;background:var(--jaune);transform:rotate(-1.2deg)}
+.titre p{margin:11px 0 0;font:600 12.5px/1.25 var(--f-body);color:#fff}
+
+
+/* --- Maintenant : trois cases séparées par un trait. Dans chacune, 1re ligne : icône puis valeur ;
+   2e ligne : petit texte. Les deux lignes sont à la même hauteur dans les trois cases. --- */
+.wx{flex:0 0 auto;display:grid;grid-template-columns:auto auto auto;justify-content:space-between;padding:10px 4px}
+.bloc{min-width:0;padding:0 7px;display:grid;grid-template-rows:var(--l1,42px) auto;row-gap:5px;justify-items:center;align-items:center;font-variant-numeric:tabular-nums}
+.bloc+.bloc{border-left:1px solid var(--line)}
+.l1{display:flex;align-items:center;gap:4px;height:100%}
+.l1 .ic{width:36px;height:36px;flex:0 0 auto}
+.pic{width:26px;height:21px;flex:0 0 auto;color:var(--wind)}
+.gros,.temp{display:flex;align-items:baseline;gap:2px;font:700 var(--chiffres,24px)/1 var(--f-display);white-space:nowrap}
+.gros small,.temp small{font:500 12px/1 var(--f-body);color:var(--ink)}
+.det{font:500 11.5px/1.2 var(--f-body);color:var(--muted);white-space:nowrap;text-align:center}
+#cond{color:var(--ink);font-weight:600}
+.det .fort,.det .tresfort{display:inline-block;padding:1px 6px;border-radius:999px;font-weight:700;color:var(--ink);background:var(--raf)}
+.det .tresfort{background:var(--raf-rouge);color:var(--raf-rouge-txt)}
+.arrow{width:18px;height:18px;flex:0 0 auto;display:inline-block}
+
+/* --- Cartes radar et prévisions : titre avec icône --- */
+.chead{display:flex;align-items:center;gap:8px;padding:0 4px}
+.chead .ic,.chead svg{width:26px;height:26px;flex:0 0 auto}
+.chead h2{margin:0;font:700 17px/1 var(--f-display);white-space:nowrap}
+.chead h2 small{font:400 12.5px/1 var(--f-body);color:var(--muted);margin-left:3px}
+.chead .droite{margin-left:auto;font:500 12px/1.2 var(--f-body);text-align:right;font-variant-numeric:tabular-nums}
+
+/* --- Radar --- */
+.radar{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:9px 8px 7px;gap:7px}
+.map-wrap{position:relative;overflow:hidden;flex:1 1 auto;min-height:120px;container-type:size;border-radius:14px;background:#003c72}
+.map{position:absolute;left:50%;top:50%;transform:translate(-56%,-50%);width:calc(1.2 * max(100cqw,100cqh * 640 / 490));aspect-ratio:640/490;background:#003c72}
+.map img{position:absolute;inset:0;width:100%;height:100%;max-width:none}
+.map .fr{visibility:hidden}
+.map .fr.on{visibility:visible}
+/* Repère jaune sur Namur (position de Namur sur la carte de l'IRM : 409 × 236 px sur 640 × 490) */
+.pin{position:absolute;left:63.9%;top:48.2%;z-index:3;pointer-events:none}
+.pin svg{position:absolute;width:18px;height:24px;left:-9px;top:-23px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.pin span{position:absolute;left:7px;top:-6px;padding:2px 7px;border-radius:999px;background:#fff;color:var(--ink);border:1.5px solid var(--ink);
+  font:600 10.5px/1.2 var(--f-body);white-space:nowrap}
+/* Barre de lecture sous la carte : lecture/pause, heure, curseur (glisser le doigt), écart avec maintenant */
+.ctrl{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:0 2px;user-select:none;-webkit-user-select:none;font-variant-numeric:tabular-nums}
+.lecture{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;padding:0;background:var(--bouton);color:#fff;display:grid;place-items:center;cursor:pointer}
+.lecture svg{width:13px;height:13px}
+.pill{flex:0 0 auto;font:500 13px/1 var(--f-body);color:var(--ink);padding:7px 10px;border-radius:999px;background:var(--pill);white-space:nowrap}
+.pill.rel{min-width:60px;text-align:center}
+.curseur{position:relative;flex:1;min-width:0;height:32px;display:flex;align-items:center;touch-action:none;cursor:ew-resize}
+.segs{display:flex;gap:2px;width:100%;height:7px}
+.segs i{position:relative;flex:1;border-radius:2px;background:var(--seg)}
+.segs i.lu{background:var(--seg-lu)}
+.segs i.rain::after{content:"";position:absolute;left:0;right:0;top:-5px;height:3px;border-radius:1px;background:var(--cyan)}
+.segs i.maint::before{content:"";position:absolute;right:-2px;top:-5px;bottom:-5px;width:2px;background:var(--ink);border-radius:1px}
+.bouton{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:#fff;border:3px solid var(--accent);box-shadow:0 1px 4px rgba(0,16,56,.35);pointer-events:none}
+
+/* --- Prévisions heure par heure : l'heure actuelle et les 4 suivantes visibles, les autres (jusqu'à +24 h) au doigt --- */
+.prev{flex:0 0 auto;padding:8px 4px 2px;display:flex;flex-direction:column;gap:6px}
+.defil{overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.defil::-webkit-scrollbar{display:none}
+.piste{display:grid;grid-auto-flow:column;grid-auto-columns:20%}
+.col{--ic:30px;display:grid;grid-template-rows:15px var(--ic) 13px 19px 15px 13px 16px;row-gap:3px;justify-items:center;align-items:center;
+  padding:4px 0 5px;border-left:1px solid var(--line);text-align:center;scroll-snap-align:start;cursor:pointer;font-variant-numeric:tabular-nums}
+.col:first-child{border-left-color:transparent}
+.col.on{background:var(--col-on);border-radius:14px;border-left-color:transparent}
+.col.on+.col{border-left-color:transparent}
+.col.past{opacity:.6}
+.col .h{font:700 14px/1 var(--f-display)}
+.col .ic{width:var(--ic);height:var(--ic);display:block}
+.col .r{font:500 12px/1 var(--f-body);color:var(--rain-txt)}
+.col .r.sec{color:var(--muted)}
+.col .t{font:700 17px/1 var(--f-display)}
+.col .w .arrow{width:15px;height:15px;color:var(--accent)}
+.col .v{font:500 12px/1 var(--f-body)}
+.col .g{font:500 11px/1 var(--f-body);color:var(--muted);padding:2px 6px;border-radius:999px}
+.col .g.fort{background:var(--raf-clair);color:var(--ink);font-weight:700}
+.col .g.tresfort{background:var(--raf-rouge);color:var(--raf-rouge-txt);font-weight:700}
+
+/* --- Alerte débit --- */
+.skiff{--a:var(--warn2)} .tout{--a:var(--warn3)}
+/* Bandeau en diagonale sur le coin haut-gauche de la carte radar quand le débit impose une restriction ;
+   son centre est à 96 px du coin, pour que le texte tienne sans couvrir le repère de Namur */
+.ruban{position:absolute;z-index:5;top:96px;left:96px;width:640px;transform:translate(-50%,-50%) rotate(-45deg);
+  padding:6px 0 5px;text-align:center;color:#fff;background:var(--a);text-transform:uppercase;line-height:1.1;
+  border-top:2px solid rgba(255,255,255,.85);border-bottom:2px solid rgba(255,255,255,.85);box-shadow:0 3px 12px rgba(0,0,0,.45);pointer-events:none}
+.ruban b{display:block;font:800 14px/1.1 var(--f-display);letter-spacing:.05em}
+.ruban small{display:block;margin-top:2px;font:600 12px/1.15 var(--f-body);letter-spacing:.01em;text-transform:none;opacity:.95}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* --- Installation sur l'écran d'accueil : feuille posée en bas de l'écran --- */
+.installer{position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:20;
+  background:var(--panel);color:var(--ink);border-radius:18px;box-shadow:0 8px 30px rgba(0,16,56,.45);padding:14px 14px 12px;
+  display:grid;grid-template-columns:52px 1fr;column-gap:12px;row-gap:10px;align-items:center}
+.installer[hidden]{display:none}
+.installer img{width:52px;height:52px;border-radius:12px;box-shadow:0 1px 4px rgba(0,16,56,.25)}
+.installer h3{margin:0 0 3px;font:700 16px/1.2 var(--f-display)}
+.installer p{margin:0;font:400 13px/1.35 var(--f-body);color:var(--muted)}
+.installer .etapes{grid-column:1/-1;margin:0;padding:0 0 0 20px;font:400 13.5px/1.45 var(--f-body)}
+.installer .etapes svg{width:16px;height:16px;vertical-align:-3px;color:var(--accent)}
+.installer .boutons{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px}
+.installer button{border:0;border-radius:999px;padding:9px 16px;font:600 14px/1 var(--f-body);cursor:pointer}
+.installer .oui{background:var(--bouton);color:#fff}
+.installer .non{background:var(--pill);color:var(--ink)}
+@media (max-height:700px){
+  .entete{height:68px} .titre h1{font-size:24px} .titre p{font-size:11px;margin-top:9px}
+  .wx{padding:7px 4px;--l1:34px} .l1 .ic{width:32px;height:32px} .wx{--chiffres:21px} .pic{width:26px;height:20px}
+  .radar,.prev{padding-top:7px} .chead h2{font-size:15px} .chead .ic,.chead svg{width:22px;height:22px}
+  .lecture{width:30px;height:30px} .pill{padding:6px 8px;font-size:12px}
+  .col{--ic:24px;row-gap:3px;padding:3px 0 4px}
+}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="entete">
+    <!-- Logo du club : remplacer logo-rcnsm.png ; tant qu'il manque, le nom s'affiche -->
+    <div class="logo"><img src="logo-rcnsm.png" alt="RCNSM" onerror="this.outerHTML='<span class=&quot;txt&quot;>RCNSM</span>'"></div>
+    <span class="sep" aria-hidden="true"></span>
+    <div class="titre"><h1><span class="souligne">Météo</span></h1><p>Royal Club Nautique<br>Sambre et Meuse</p></div>
+  </header>
+
+  <section class="panel wx" id="wx" aria-label="Maintenant">
+    <div class="bloc">
+      <div class="l1"><span id="nowIc"></span><div class="temp" id="temp">–</div></div>
+      <span class="det" id="cond">Chargement…</span>
+    </div>
+    <div class="bloc">
+      <div class="l1"><svg class="pic" viewBox="0 0 24 18" role="img" aria-label="Vent"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 6h11a3 3 0 1 0-3-3"/><path d="M2 10h16a3 3 0 1 1-3 3"/><path d="M2 14h7"/></g></svg><b class="gros" id="wnow">–</b></div>
+      <span class="det" id="gnow"></span>
+    </div>
+    <a class="bloc meuse" id="meuse" href="https://hydrometrie.wallonie.be/home/observations/debit.html?station=DGH%2F8016&amp;topic=QADM-hr" target="_blank" rel="noopener">
+      <div class="l1"><svg class="pic" viewBox="0 0 24 18" role="img" aria-label="Débit de la Meuse"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 4q2.5-2.4 5 0t5 0 5 0 5 0"/><path d="M2 9q2.5-2.4 5 0t5 0 5 0 5 0"/><path d="M2 14q2.5-2.4 5 0t5 0 5 0 5 0"/></g></svg><b class="gros" id="mq">–</b></div>
+      <span class="det" id="mst">débit</span>
+    </a>
+  </section>
+
+  <section class="panel radar" aria-label="Radar des précipitations IRM">
+    <div class="chead"><span id="icRadar"></span><h2>Radar pluie</h2><span class="droite" id="rval"></span></div>
+    <div class="map-wrap"><div class="ruban" id="ruban" hidden></div><div class="map" id="map" title="Toucher la carte : pause ou lecture">
+      <img src="carte-marine.png" alt="">
+      <div id="frames"></div>
+      <img id="loc" alt="" hidden>
+      <div class="pin" aria-hidden="true"><svg viewBox="0 0 18 24"><path d="M9 23C9 23 1.5 13.6 1.5 8.6a7.5 7.5 0 0 1 15 0C16.5 13.6 9 23 9 23z" fill="var(--jaune)" stroke="#00306c" stroke-width="1.5"/><circle cx="9" cy="8.6" r="2.8" fill="#00306c"/></svg><span>Namur</span></div>
+    </div></div>
+    <div class="ctrl" id="ctrl">
+      <button class="lecture" id="lecture" type="button"></button>
+      <span class="pill" id="rtime">--:--</span>
+      <div class="curseur" id="curseur" role="slider" aria-label="Heure du radar"><div class="segs" id="segs"></div><span class="bouton" id="bouton"></span></div>
+      <span class="pill rel" id="rel"></span>
+    </div>
+  </section>
+
+  <!-- Proposition d'installation : Android (bouton) ou iPhone (mode d'emploi) ; jamais quand l'appli est déjà installée -->
+  <div class="installer" id="installer" role="dialog" aria-labelledby="inst-titre" hidden>
+    <img src="icon-192.png" alt="">
+    <div><h3 id="inst-titre">Installer l'application</h3><p id="inst-texte">Ajoutez la météo RCNSM à votre écran d'accueil.</p></div>
+    <ol class="etapes" id="inst-etapes" hidden></ol>
+    <div class="boutons"><button class="non" id="inst-non" type="button">Plus tard</button><button class="oui" id="inst-oui" type="button" hidden>Installer</button></div>
+  </div>
+
+  <section class="panel prev" aria-label="Prévisions heure par heure">
+    <div class="chead"><svg viewBox="0 0 26 26" aria-hidden="true"><g fill="none" stroke="var(--cloud-ink)" stroke-width="2" stroke-linecap="round"><circle cx="13" cy="13" r="10"/><path d="M13 7v6l4 3"/></g></svg><h2>Prévisions <small id="stamp">(Namur)</small></h2></div>
+    <div class="defil" id="defil"><div class="piste" id="cols"></div></div>
+  </section>
+
+
+</div>
+<script>
+"use strict";
+const LAT=50.4466, LON=4.8622;
+const IRM="https://app.meteo.be/services/appv4/";
+const KIWIS="https://hydrometrie.wallonie.be/services/KiWIS/KiWIS?service=kisters&type=queryServices&datasource=0&format=json";
+const $=id=>document.getElementById(id);
+
+/* MD5 (clé journalière des images radar de l'IRM) */
+function md5(str){
+ const k=[],r=[7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+ for(let i=0;i<64;i++)k[i]=Math.floor(Math.abs(Math.sin(i+1))*4294967296)|0;
+ const bytes=new TextEncoder().encode(str);
+ const len=bytes.length, n=((len+8)>>6)+1, w=new Int32Array(n*16);
+ for(let i=0;i<len;i++) w[i>>2]|=bytes[i]<<((i%4)*8);
+ w[len>>2]|=0x80<<((len%4)*8); w[n*16-2]=len*8;
+ let a0=0x67452301,b0=0xefcdab89|0,c0=0x98badcfe|0,d0=0x10325476;
+ for(let j=0;j<w.length;j+=16){
+  let a=a0,b=b0,c=c0,d=d0;
+  for(let i=0;i<64;i++){
+   let f,g;
+   if(i<16){f=(b&c)|(~b&d);g=i}else if(i<32){f=(d&b)|(~d&c);g=(5*i+1)%16}
+   else if(i<48){f=b^c^d;g=(3*i+5)%16}else{f=c^(b|~d);g=(7*i)%16}
+   const t=d;d=c;c=b;const x=(a+f+k[i]+w[j+g])|0;
+   b=(b+((x<<r[i])|(x>>>(32-r[i]))))|0;a=t;
+  }
+  a0=(a0+a)|0;b0=(b0+b)|0;c0=(c0+c)|0;d0=(d0+d)|0;
+ }
+ return [a0,b0,c0,d0].map(v=>{let h='';for(let i=0;i<4;i++)h+=((v>>>(i*8))&255).toString(16).padStart(2,'0');return h}).join('');
+}
+const fmtTZ=(d,o)=>new Intl.DateTimeFormat('fr-BE',Object.assign({timeZone:'Europe/Brussels'},o)).format(d);
+const hhmm=d=>fmtTZ(d,{hour:'2-digit',minute:'2-digit'});
+const withParam=(u,k,v)=>{const x=new URL(u);x.searchParams.set(k,v);return x.toString()};
+const nf1=v=>v.toLocaleString('fr-BE',{maximumFractionDigits:1});
+
+/* --- Icônes --- */
+const CLOUD='<path d="M9 26h15.5a5.5 5.5 0 0 0 .8-10.9A8 8 0 0 0 9.8 16.6 4.7 4.7 0 0 0 9 26z" fill="var(--cloud-fill)" stroke="var(--cloud-ink)" stroke-width="1.8" stroke-linejoin="round"/>';
+const SUN=(cx,cy,r)=>{let s=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--sun)"/>`;for(let i=0;i<8;i++){const a=i*Math.PI/4,x1=cx+Math.cos(a)*(r+2.2),y1=cy+Math.sin(a)*(r+2.2),x2=cx+Math.cos(a)*(r+4.6),y2=cy+Math.sin(a)*(r+4.6);s+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="var(--sun)" stroke-width="2" stroke-linecap="round"/>`}return s};
+const MOON=(cx,cy,r)=>`<path d="M${cx+r*0.35} ${cy-r} a${r} ${r} 0 1 0 ${r*0.65} ${r*1.55} a${r*0.8} ${r*0.8} 0 0 1 ${-r*0.65} ${-r*1.55}z" fill="var(--accent)"/>`;
+const drops=(n,col)=>{let s='';const xs=n===3?[11,16,21]:[9,13,17,21,25].slice(0,n);xs.forEach(x=>s+=`<line x1="${x}" y1="28" x2="${x-1.5}" y2="31" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`);return s};
+const LABEL={clear:['Ensoleillé','Ciel dégagé'],partly:['Partiellement nuageux','Partiellement nuageux'],cloud:['Nuageux','Nuageux'],rain:['Pluie','Pluie'],pour:['Fortes averses','Fortes averses'],storm:['Orageux','Orageux'],sleet:['Pluie et neige','Pluie et neige'],snow:['Neige','Neige'],fog:['Brouillard','Brouillard']};
+function iconK(k,night,cls){let s='';
+ const small=night?MOON(9,9,6):SUN(10,10,5);
+ if(k==='clear') s=night?MOON(14,15,10):SUN(16,16,7.5);
+ else if(k==='partly') s=small+CLOUD;
+ else if(k==='cloud') s=CLOUD;
+ else if(k==='rain') s=`<g transform="translate(0,-3)">${CLOUD}</g>`+drops(3,'var(--rain)');
+ else if(k==='pour') s=`<g transform="translate(0,-3)">${CLOUD}</g>`+drops(5,'var(--rain)');
+ else if(k==='storm') s=`<g transform="translate(0,-3)">${CLOUD}</g><path d="M17 22l-4 6h4l-2 4 6-7h-4l2-3z" fill="var(--sun)"/>`;
+ else if(k==='snow') s=`<g transform="translate(0,-3)">${CLOUD}</g><circle cx="11" cy="29" r="1.5" fill="var(--rain)"/><circle cx="16" cy="30" r="1.5" fill="var(--rain)"/><circle cx="21" cy="29" r="1.5" fill="var(--rain)"/>`;
+ else if(k==='sleet') s=`<g transform="translate(0,-3)">${CLOUD}</g><line x1="12" y1="28" x2="10.5" y2="31" stroke="var(--rain)" stroke-width="2" stroke-linecap="round"/><circle cx="19" cy="29.5" r="1.5" fill="var(--rain)"/>`;
+ else s=`<g stroke="var(--cloud-ink)" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="12" x2="26" y2="12"/><line x1="4" y1="17" x2="24" y2="17"/><line x1="8" y1="22" x2="28" y2="22"/></g>`;
+ return `<svg class="ic ${cls||''}" viewBox="0 0 32 32" aria-hidden="true">${s}</svg>`;}
+/* codes WMO (Open-Meteo) */
+function wmoKind(c){c=+c; if(c<=1)return'clear'; if(c===2)return'partly'; if(c===3)return'cloud'; if(c===45||c===48)return'fog';
+ if(c===65||c===82)return'pour'; if(c===66||c===67)return'sleet'; if((c>=71&&c<=77)||c===85||c===86)return'snow'; if(c>=95)return'storm'; return'rain';}
+/* Flèche de vent : pointe vers où le vent souffle (direction météo + 180°) */
+const arrow=deg=>`<svg class="arrow" viewBox="0 0 20 20" aria-hidden="true"><g transform="rotate(${(+deg+180)%360} 10 10)"><path d="M10 1.5l6.5 16.5-6.5-3.8-6.5 3.8z" fill="currentColor"/></g></svg>`;
+const DIRS=['N','NE','E','SE','S','SO','O','NO'];
+const dirTxt=deg=>DIRS[Math.round(deg/45)%8];
+/* Rafales : orange à partir de 40 km/h, rouge à partir de 60 km/h */
+const gustCls=g=>g>=60?'tresfort':(g>=40?'fort':'');
+
+/* --- Météo (Open-Meteo) : maintenant, et heure par heure pour les colonnes sous le radar --- */
+let HOURLY=null;
+async function loadWeather(){
+ const u=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`+
+  `&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_gusts_10m,wind_direction_10m`+
+  `&hourly=temperature_2m,weather_code,is_day,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m`+
+  `&timezone=Europe%2FBrussels&past_hours=3&forecast_hours=26`;
+ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
+ const j=await r.json(), c=j.current, off=(j.utc_offset_seconds||0)*1000;
+ const k=wmoKind(c.weather_code), night=!c.is_day;
+ $('temp').innerHTML=`${Math.round(c.temperature_2m)}<small>°C</small>`;
+ $('nowIc').innerHTML=iconK(k,night);
+ $('cond').textContent=LABEL[k][night?1:0];
+ $('stamp').textContent='(Namur · '+hhmm(new Date())+')';
+ const g0=Math.round(c.wind_gusts_10m);
+ $('wnow').innerHTML=`${Math.round(c.wind_speed_10m)}<small>km/h</small>`;
+ $('wnow').title='Vent de '+dirTxt(c.wind_direction_10m);
+ $('gnow').innerHTML=`Rafales <span class="${gustCls(g0)}">${g0} km/h</span>`;
+ HOURLY={t:j.hourly.time.map(t=>Date.parse(t+'Z')-off),H:j.hourly};
+ renderCols();
+}
+/* Colonnes horaires : de la 1re heure du radar jusqu'à +24 h. Chacune : l'heure, le ciel, la pluie de l'heure,
+   la température, le vent et les rafales (orange dès 40 km/h, rouge dès 60) */
+const segEls=()=>$('segs').children;
+const hourTxt=hs=>parseInt(fmtTZ(new Date(hs),{hour:'numeric',hourCycle:'h23'}),10)+'\u202fh';
+function renderCols(){
+ if(!frames.hours) return;
+ const nowH=Math.floor(Date.now()/36e5)*36e5, h0=frames.hours[0];
+ const fin=HOURLY?Math.min(nowH+24*36e5,HOURLY.t[HOURLY.t.length-2]):frames.hours[4];
+ const hrs=[]; for(let hs=h0;hs<=fin;hs+=36e5) hrs.push(hs);
+ $('cols').innerHTML=hrs.map((hs,c)=>{
+  const i=HOURLY?HOURLY.t.indexOf(hs):-1, H=HOURLY&&HOURLY.H;
+  if(i<0) return `<div class="col" data-c="${c}"><span class="h">${hourTxt(hs)}</span></div>`;
+  const p=+H.precipitation[i+1]||0, g=Math.round(H.wind_gusts_10m[i]);   // pluie tombée entre h et h+1
+  return `<div class="col${hs<nowH?' past':''}" data-c="${c}">`+
+   `<span class="h">${hourTxt(hs)}</span>`+
+   iconK(wmoKind(H.weather_code[i]),!H.is_day[i])+
+   `<span class="r${p>=0.1?'':' sec'}">${p>=0.1?nf1(p)+'\u202fmm':'–'}</span>`+
+   `<span class="t">${Math.round(H.temperature_2m[i])}\u202f°C</span>`+
+   `<span class="w" title="Vent de ${dirTxt(H.wind_direction_10m[i])}">${arrow(H.wind_direction_10m[i])}</span>`+
+   `<span class="v">${Math.round(H.wind_speed_10m[i])}\u202fkm/h</span>`+
+   `<span class="g ${gustCls(g)}">raf. ${g}</span></div>`}).join('');
+ // au départ : l'heure actuelle en premier, les 4 suivantes à côté ; l'heure précédente reste accessible à gauche
+ const k=hrs.indexOf(nowH), el=$('cols').children[Math.max(k,0)];
+ $('defil').scrollLeft=el.offsetLeft-$('cols').children[0].offsetLeft;
+ show(cur);
+}
+function markCol(){ for(const el of $('cols').children) el.classList.toggle('on',+el.dataset.c===Math.floor(cur/6)); }
+
+/* --- Radar IRM : 5 heures pleines (6 images par heure) = l'heure précédente, l'heure en cours et la prévision
+   de déplacement de la pluie (l'IRM la fournit jusqu'à +4 h après la dernière observation) --- */
+let frames=[],cur=0,timer=null,paused=false,speed=300;
+const irmKey=m=>md5('r9EnW374jkJ9acc;'+m+';'+fmtTZ(new Date(),{day:'2-digit',month:'2-digit',year:'numeric'}));
+function buildRadar(){
+ const p=n=>String(n).padStart(2,'0');
+ const utc=d=>d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+p(d.getUTCHours())+p(d.getUTCMinutes());
+ const step=6e5, d=new Date(Math.floor((Date.now()-12*6e4)/step)*step), k=irmKey('getIncaImage');
+ const t0=d.getTime()-step;                                  // heure de la dernière observation
+ // 5 heures pleines qui finissent au plus tard à la dernière prévision (t0 + 4 h) : 50 à 110 min d'observations
+ const h0=Math.floor((t0-50*6e4)/36e5)*36e5;
+ const seq=[]; for(let n=0;n<30;n++){const t=h0+n*step, i=new Date(t+step);
+  seq.push({time:new Date(t).toISOString(),value:null,uri:`${IRM}?s=getIncaImage&i=${utc(i)}&f=2&k=${k}&d=${utc(d)}`});}
+ renderRadar({sequence:seq,speed:0.4,unit:{fr:''},
+  sequenceHint:{fr:'Radar IRM'}});
+ frames.hours=[0,1,2,3,4].map(n=>h0+n*36e5);
+ frames.last=(t0-h0)/step; cur=frames.last; renderCols();
+ frames[0].el.onerror=()=>{$('rval').textContent='Radar indisponible'};
+ loadNowcast().catch(()=>{});
+}
+/* Intensité de pluie sur Namur : prévision immédiate Open-Meteo par pas de 15 min */
+async function loadNowcast(){
+ const u=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&minutely_15=precipitation&past_minutely_15=10&forecast_minutely_15=18&timezone=GMT`;
+ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
+ const m=(await r.json()).minutely_15; if(!m||!m.time) throw new Error('vide');
+ const slots=m.time.map((t,i)=>({t:new Date(t+'Z'),mmh:(+m.precipitation[i]||0)*4}));
+ frames.forEach(f=>{const s=slots.find(x=>x.t>=f.t); f.v=s?s.mmh:null});
+ frames.unit='mm/h'; frames.model=true;
+ renderSegs();
+ show(cur);
+}
+function renderRadar(a){
+ speed=Math.max(150,(a.speed||0.3)*1000);
+ const now=Date.now();
+ frames=a.sequence.map(s=>({t:new Date(s.time),v:s.value,u:withParam(s.uri,'rs','1')}));
+ let last=0; frames.forEach((f,i)=>{if(f.t<=now) last=i});
+ const box=$('frames'); box.innerHTML='';
+ frames.forEach(f=>{const im=new Image();im.className='fr';im.alt='';im.decoding='async';im.src=f.u;box.appendChild(im);f.el=im});
+ if(a.localisationLayer){
+  // point de localisation : second essai sur le serveur cdn de l'IRM, puis on le masque plutôt que d'afficher une image cassée
+  const loc=$('loc'), u=withParam(a.localisationLayer,'th','d');
+  loc.onerror=()=>{ if(!loc.dataset.essai){loc.dataset.essai='1';loc.src=u.replace('//app.meteo.be/','//cdn.meteo.be/')} else loc.hidden=true };
+  loc.onload=()=>{loc.hidden=false}; delete loc.dataset.essai; loc.src=u;
+ }
+ frames.unit=''; frames.last=last; cur=last; renderSegs(); play();
+}
+/* Barre de lecture : un petit segment par image ; repère blanc = dernière observation ; trait bleu clair au-dessus = pluie sur Namur */
+function renderSegs(){
+ $('segs').innerHTML=frames.map((f,k)=>`<i class="${k===frames.last?'maint':''}${(f.v||0)>0.05?' rain':''}"></i>`).join('');
+}
+const PLAY='<svg viewBox="0 0 14 14"><path d="M3 1.5v11l9.5-5.5z" fill="currentColor"/></svg>';
+const PAUSE='<svg viewBox="0 0 14 14"><path d="M2.5 1.5h3v11h-3zM8.5 1.5h3v11h-3z" fill="currentColor"/></svg>';
+function majLecture(){ $('lecture').innerHTML=paused?PLAY:PAUSE; $('lecture').setAttribute('aria-label',paused?'Lecture':'Pause'); }
+function show(i){
+ frames.forEach((f,k)=>f.el.classList.toggle('on',k===i));
+ const segs=segEls(); for(let k=0;k<segs.length;k++) segs[k].classList.toggle('lu',k<=i);
+ $('bouton').style.left=((i+0.5)/frames.length*100)+'%';
+ markCol();
+ const f=frames[i];
+ $('rtime').textContent=hhmm(f.t);
+ // écart avec maintenant, arrondi à 10 min
+ const m=Math.round((f.t-Date.now())/6e5)*10, a=Math.abs(m), hm=a>=60?`${Math.floor(a/60)} h${a%60?' '+String(a%60).padStart(2,'0'):''}`:`${a} min`;
+ $('rel').textContent=a<10?'maint.':(m>0?'+':'−')+hm;
+ $('rval').textContent=(i<=frames.last?'Observé':'Prévision')+(f.v==null?'':` · ${frames.model?'≈ ':''}${(+f.v).toFixed(1).replace(".",",")} ${frames.unit}`);
+}
+function play(){clearInterval(timer);if(paused||!frames.length)return;
+ timer=setInterval(()=>{cur=(cur+1)%frames.length;show(cur)},speed);}
+function togglePause(){paused=!paused;majLecture();if(paused){clearInterval(timer);cur=frames.last||0;show(cur)}else play()}
+$('map').addEventListener('click',e=>{ if(!e.target.closest('.ctrl')) togglePause(); });
+$('lecture').addEventListener('click',()=>{ paused=!paused; majLecture(); if(paused) clearInterval(timer); else play(); });
+majLecture();
+/* Glisser le doigt sur le curseur : déplacement dans le temps ; toucher une colonne des prévisions : la carte à cette heure-là.
+   L'animation se met en pause ; le bouton de lecture (ou un toucher sur la carte) la relance. */
+(function(){
+ const cs=$('curseur'); let drag=false;
+ const pause=()=>{ paused=true; clearInterval(timer); majLecture(); };
+ const seek=e=>{ if(!frames.length) return;
+  const b=cs.getBoundingClientRect(), i=Math.max(0,Math.min(frames.length-1,Math.floor((e.clientX-b.left)/b.width*frames.length)));
+  if(i!==cur){cur=i;show(cur)} };
+ cs.addEventListener('pointerdown',e=>{ if(!frames.length) return; drag=true; cs.setPointerCapture(e.pointerId); pause(); seek(e); });
+ cs.addEventListener('pointermove',e=>{ if(drag) seek(e); });
+ const stop=()=>{drag=false}; cs.addEventListener('pointerup',stop); cs.addEventListener('pointercancel',stop);
+ $('cols').addEventListener('click',e=>{ const c=e.target.closest('.col'); if(!c) return;
+  const n=+c.dataset.c; if(n>4) return;
+  pause(); cur=Math.min(n*6+(n*6<=frames.last&&frames.last<n*6+6?frames.last-n*6:0),frames.length-1); show(cur); });
+})();
+
+/* --- Débit de la Meuse (SPW) ---
+   Tailfer si la station mesure ; sinon débit estimé à Tailfer = Waulsort + Lesse (Gendron) + Bocq (Yvoir) + Molignée (Warnant)
+   + petits affluents Burnot (Profondeville) et ruisseau des Fonds de Leffe (Dinant)
+   (écart médian 4 % sur 2022-2026) ; si un des trois affluents principaux manque, Waulsort seul.
+   Les petits affluents sont ajoutés quand ils mesurent, sinon comptés à 0 (quelques m³/s au plus en crue). */
+const ST_TAILFER={path:'DGH/8016/QADM/Cmd.RunOff.Comp',lien:'DGH%2F8016&topic=QADM-hr'};
+const ST_WAULSORT={path:'DGH/8078/QADM/Cmd.RunOff.Comp',lien:'DGH%2F8078&topic=QADM-hr'};
+/* Règles du club : au-delà de 300 m³/s, skiff et double interdits ; au-delà de 500 m³/s, toute sortie interdite */
+const SEUIL_SKIFF=300, SEUIL_TOUT=500;
+function alerte(q){
+ const niv=q>SEUIL_TOUT?'tout':(q>SEUIL_SKIFF?'skiff':'');
+ const txt={tout:['Toute sortie<br>interdite',SEUIL_TOUT],skiff:['Skiff et double<br>interdit',SEUIL_SKIFF]}[niv];
+ $('ruban').className='ruban'; $('ruban').hidden=!niv;
+ if(!niv) return;
+ $('ruban').classList.add(niv);
+ $('ruban').innerHTML=`<b>${txt[0]}</b><small>(débit &gt; ${txt[1]} m³/s)</small>`;
+}
+const AFFLUENTS=['DGH/8221/Q/Cmd.RunOff.Comp','DGH/8133/Q/Cmd.RunOff.Comp','DGH/8163/Q/Cmd.RunOff.Comp'];
+const PETITS_AFFLUENTS=['DCENN/L6001/Q/Cmd.RunOff.Comp','DCENN/L8470/Q/Cmd.RunOff.Comp'];
+async function series(path,hours){
+ const from=new Date(Date.now()-hours*36e5).toISOString();
+ const u=`${KIWIS}&request=getTimeseriesValues&ts_path=${encodeURIComponent(path)}&returnfields=Timestamp,Value&from=${from}`;
+ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error('SPW '+r.status);
+ const j=await r.json(); return ((j[0]&&j[0].data)||[]).filter(x=>x[1]!=null).map(x=>({t:new Date(x[0]),v:+x[1]}));
+}
+const fresh=d=>d.length&&(Date.now()-d[d.length-1].t)<6*36e5;
+/* valeur d'un affluent à l'instant t : dernière mesure connue à t (au plus 2 h avant) */
+const at=(d,t)=>{let v=null;for(const x of d){if(x.t>t)break;if(t-x.t<=2*36e5)v=x.v}return v};
+async function loadMeuse(){
+ let data=await series(ST_TAILFER.path,6).catch(()=>[]), st=ST_TAILFER, nom='Tailfer';
+ if(!fresh(data)){
+  const [w,...aff]=await Promise.all([series(ST_WAULSORT.path,6),...AFFLUENTS.map(p=>series(p,8).catch(()=>[]))]);
+  const petits=await Promise.all(PETITS_AFFLUENTS.map(p=>series(p,8).catch(()=>[])));
+  st=ST_WAULSORT;
+  const est=fresh(w)&&aff.every(fresh)?w.map(x=>{const a=aff.map(d=>at(d,x.t));if(a.includes(null))return null;
+   const b=petits.map(d=>at(d,x.t)||0);return {t:x.t,v:x.v+a[0]+a[1]+a[2]+b[0]+b[1]}}).filter(Boolean):[];
+  if(est.length&&fresh(est)){data=est; nom='Tailfer estimé';}
+  else {data=w; nom='Waulsort';}
+ }
+ if(!data.length) throw new Error('aucune donnée');
+ $('meuse').href=`https://hydrometrie.wallonie.be/home/observations/debit.html?station=${st.lien}`;
+ const last=data[data.length-1];
+ const nf=v=>v.toLocaleString('fr-BE',{maximumFractionDigits:v<100?1:0});
+ $('mq').innerHTML=`${nf(last.v)}<small>m³/s</small>`;
+ $('mst').textContent=`${nom} · ${hhmm(last.t)}`;
+ alerte(last.v);
+}
+
+/* --- Rafraîchissement --- */
+let lastRun=0;
+function refresh(){
+ lastRun=Date.now();
+ loadWeather().catch(e=>{$('cond').textContent='Météo indisponible';$('stamp').textContent=e.message});
+ buildRadar();
+ loadMeuse().catch(e=>{$('mst').textContent='Débit indisponible ('+e.message+')'});
+}
+$('icRadar').innerHTML=iconK('rain',false);
+refresh();
+setInterval(refresh,10*60e3);
+/* Plein écran : automatique quand la page est installée (manifeste) ; sinon au premier toucher */
+(function(){
+ const installed=()=>matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches;
+ const de=document.documentElement;
+ if(installed()||!de.requestFullscreen) return;
+ const go=e=>{ if(e.target.closest('#installer')) return; if(!document.fullscreenElement) de.requestFullscreen({navigationUI:'hide'}).catch(()=>{}); };
+ document.addEventListener('pointerup',go,{passive:true});
+})();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastRun>3*60e3)refresh()});
+/* Installation sur l'écran d'accueil.
+   Android (Chrome, Edge…) : le navigateur signale que l'appli est installable → bouton « Installer ».
+   Android sans ce signal (autres navigateurs) : mode d'emploi par le menu.
+   iPhone / iPad : Apple ne permet pas de bouton, on explique « Partager » puis « Sur l'écran d'accueil ».
+   « Plus tard » : on ne repropose pas avant 30 jours. Rien n'apparaît si l'appli est déjà installée.
+   Pour voir la feuille sans téléphone : ?installer=android ou ?installer=iphone */
+(function(){
+ const force=new URLSearchParams(location.search).get('installer');
+ const installee=matchMedia('(display-mode: fullscreen)').matches||matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+ const CLE='rcnsm-installer-plus-tard', DELAI=30*864e5;
+ const masque=()=>{ try{ return Date.now()-(+localStorage.getItem(CLE)||0)<DELAI }catch(e){ return false } };
+ if(!force&&(installee||masque())) return;
+ const ua=navigator.userAgent;
+ const android=force==='android'||(!force&&/Android/.test(ua));
+ const ios=!android&&(force==='iphone'||(!force&&(/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))));
+ const box=$('installer'), etapes=$('inst-etapes');
+ const PARTAGE='<svg viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V1.8M5 4.5 8 1.5l3 3"/><path d="M5.5 7H3.5v7.5h9V7h-2"/></g></svg>';
+ const montrer=()=>{ box.hidden=false; };
+ $('inst-non').onclick=()=>{ box.hidden=true; try{ localStorage.setItem(CLE,String(Date.now())) }catch(e){} };
+ let evt=null;
+ window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); evt=e;
+  $('inst-texte').textContent="Ajoutez la météo RCNSM à votre écran d'accueil : elle s'ouvrira en plein écran, comme une application.";
+  etapes.hidden=true; $('inst-oui').hidden=false; montrer();
+ });
+ $('inst-oui').onclick=async()=>{ if(!evt) return; box.hidden=true; evt.prompt(); try{ await evt.userChoice }catch(e){} evt=null; };
+ window.addEventListener('appinstalled',()=>{ box.hidden=true; });
+ if(ios){
+  $('inst-texte').textContent="Sur iPhone, l'installation se fait en deux gestes :";
+  etapes.innerHTML=`<li>Touchez le bouton <b>Partager</b> ${PARTAGE} dans la barre de Safari</li><li>Choisissez <b>« Sur l'écran d'accueil »</b>, puis <b>Ajouter</b></li>`;
+  etapes.hidden=false; $('inst-non').textContent='Compris';
+  setTimeout(montrer,1500);
+ } else if(android){
+  // si le navigateur n'a pas proposé l'installation au bout de 4 s : mode d'emploi par le menu
+  setTimeout(()=>{ if(evt||!box.hidden) return;
+   if(force==='android'){ $('inst-oui').hidden=false; $('inst-oui').onclick=()=>{ box.hidden=true }; montrer(); return; }
+   $('inst-texte').textContent="Pour l'installer :";
+   etapes.innerHTML="<li>Ouvrez le menu <b>⋮</b> du navigateur</li><li>Choisissez <b>« Installer l'application »</b> ou <b>« Ajouter à l'écran d'accueil »</b></li>";
+   etapes.hidden=false; $('inst-non').textContent='Compris'; montrer();
+  },4000);
+ }
+})();
+</script>
+</body>
+</html>
