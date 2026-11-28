@@ -512,7 +512,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now(
  window.addEventListener('appinstalled',()=>{ box.hidden=true; });
  if(ios){
   $('inst-texte').textContent="Sur iPhone, l'installation se fait en deux gestes :";
-  etapes.innerHTML=`<li>Touchez le bouton <b>Partager</b> ${PARTAGE} dans la barre de Safari</li><li>Choisissez <b>« Sur l'écran d'accueil »</b>, puis <b>Ajouter</b></li>`;
+  etapes.innerHTML=`<li>Touchez le bouton <b>Partager</b> ${PARTAGE} dans la barre de Safari (s'il n'y est pas : touchez d'abord <b>•••</b>, puis <b>Partager</b>)</li><li>Choisissez <b>« Sur l'écran d'accueil »</b>, puis <b>Ajouter</b></li>`;
   etapes.hidden=false; $('inst-non').textContent='Compris';
   setTimeout(montrer,1500);
  } else if(android){
